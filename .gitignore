@@ -1,0 +1,51 @@
+# =========================
+# OS / Editor
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+# ROS2 / colcon build outputs
+build/
+install/
+log/
+.colcon/
+# CMake / Make artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+Makefile
+# Runtime data (local only)
+*.db
+*.db3
+*.sqlite
+*.sqlite3
+*.bag
+*.mcap
+# Local backup / temp files
+*.bak
+*.tmp
+*_backup/
+# Third-party local build artifacts
+# Keep source tracked, ignore generated outputs.
+third_party/rtabmap-0.23.4/build_local/
+third_party/rtabmap-0.23.4/install/
+third_party/rtabmap-0.23.4/build/
+# Vendored RTABMap: keep runtime/source code, ignore development metadata
+third_party/rtabmap-0.23.4/.devcontainer/
+third_party/rtabmap-0.23.4/.github/
+third_party/rtabmap-0.23.4/.settings/
+third_party/rtabmap-0.23.4/.project
+third_party/rtabmap-0.23.4/.cproject
+third_party/rtabmap-0.23.4/.dockerignore
+
+bags/
