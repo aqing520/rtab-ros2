@@ -20,3 +20,4 @@
 [livox_ros_driver2_node-1] successfully enable Livox Lidar imu, ip: 192.168.168.20
 [livox_ros_driver2_node-1] [INFO] [1774094913.714496431] [livox_lidar_publisher]: livox/imu publish use imu format
 [livox_ros_driver2_node-1] [INFO] [1774094913.717869223] [livox_lidar_publisher]: livox/lidar publish use PointCloud2 format
+[livox_ros_driver2_node-1] [INFO] [1774095913.838714186] [rclcpp]: signal_handler(signum=15)
