@@ -55,10 +55,10 @@ def generate_launch_description() -> LaunchDescription:
                               description='Input point cloud topic for ICP and RTAB-Map'),
         DeclareLaunchArgument('imu_topic', default_value='/livox/imu',
                               description='IMU topic (Livox MID360 onboard IMU)'),
-        DeclareLaunchArgument('frame_id', default_value='base_link',
+        DeclareLaunchArgument('frame_id', default_value='base_footprint',
                               description='Robot base frame'),
-        DeclareLaunchArgument('odom_frame_id', default_value='odom',
-                              description='Odometry frame'),
+        DeclareLaunchArgument('odom_frame_id', default_value='',
+                              description='RTAB-Map odometry TF frame. Keep empty to use odom_topic'),
     ]
 
     # ── 1. Livox MID360 driver (rviz launch outputs PointCloud2) ──
