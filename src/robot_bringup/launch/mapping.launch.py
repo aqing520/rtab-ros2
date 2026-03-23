@@ -57,6 +57,7 @@ def generate_launch_description() -> LaunchDescription:
                               description='IMU topic (Livox MID360 onboard IMU)'),
         DeclareLaunchArgument('frame_id', default_value='base_footprint',
                               description='Robot base frame'),
+        ## 这里流空，确保slam订阅/Odometry/local
         DeclareLaunchArgument('odom_frame_id', default_value='',
                               description='RTAB-Map odometry TF frame. Keep empty to use odom_topic'),
     ]
