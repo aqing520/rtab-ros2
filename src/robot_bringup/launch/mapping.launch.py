@@ -22,7 +22,7 @@ from launch.actions import (
     SetEnvironmentVariable,
 )
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -34,6 +34,7 @@ def generate_launch_description() -> LaunchDescription:
     publish_base_link_tf = LaunchConfiguration('publish_base_link_tf')
     rviz = LaunchConfiguration('rviz')
     rtabmap_viz = LaunchConfiguration('rtabmap_viz')
+    delete_db_on_start = LaunchConfiguration('delete_db_on_start')
     ekf_params_file = LaunchConfiguration('ekf_params_file')
 
     robot_bringup_share = FindPackageShare('robot_bringup')
@@ -49,6 +50,8 @@ def generate_launch_description() -> LaunchDescription:
                               description='Publish static TF base_footprint → base_link'),
         DeclareLaunchArgument('rviz', default_value='false'),
         DeclareLaunchArgument('rtabmap_viz', default_value='true'),
+        DeclareLaunchArgument('delete_db_on_start', default_value='true',
+                              description='Delete old RTAB-Map database on startup for a clean mapping session'),
         DeclareLaunchArgument('ekf_params_file',
                               default_value=PathJoinSubstitution([robot_bringup_share, 'config', 'ekf_local.yaml'])),
         DeclareLaunchArgument('scan_cloud_topic', default_value='/livox/lidar',
@@ -169,18 +172,10 @@ def generate_launch_description() -> LaunchDescription:
             'approx_sync': 'true',
             'qos': '2',
             'namespace': 'rtabmap',
-            'rtabmap_args': '--Reg/Strategy 1 '
-                            '--RGBD/ProximityBySpace true '
-                            '--Mem/NotLinkedNodesKept false '
-                            '--Icp/VoxelSize 0.12 '
-                            '--Icp/DownsamplingStep 1 '
-                            '--Icp/MaxTranslation 1.5 '
-                            '--Icp/MaxRotation 0.7 '
-                            '--Icp/MaxCorrespondenceDistance 0.8 '
-                            '--Icp/CorrespondenceRatio 0.05 '
-                            '--Icp/PointToPlane true '
-                            '--Icp/PointToPlaneK 15 '
-                            '--Icp/PointToPlaneMinComplexity 0.04',
+            'args': PythonExpression([
+                "('--delete_db_on_start ' if '", delete_db_on_start, "' == 'true' else '') + "
+                "'--Reg/Strategy 1 --RGBD/ProximityBySpace true --Mem/NotLinkedNodesKept false --Icp/VoxelSize 0.12 --Icp/DownsamplingStep 1 --Icp/MaxTranslation 1.5 --Icp/MaxRotation 0.7 --Icp/MaxCorrespondenceDistance 0.8 --Icp/CorrespondenceRatio 0.05 --Icp/PointToPlane true --Icp/PointToPlaneK 15 --Icp/PointToPlaneMinComplexity 0.04'"
+            ]),
         }.items(),
     )
 
