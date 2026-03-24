@@ -39,9 +39,10 @@ ekf_local_filter:
     odom0_relative: false
 
     # --- Livox MID360 板载 IMU ---
+    # 注意: 不融合 IMU 绝对 yaw，避免与 ICP odom 的 yaw 冲突导致 EKF 发散
     imu0: /livox/imu
     imu0_config: [false, false, false,
-                  false, false, true,
+                  false, false, false,
                   false, false, false,
                   false, false, true,
                   false, false, false]
