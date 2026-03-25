@@ -137,12 +137,15 @@ def generate_launch_description() -> LaunchDescription:
     ld = LaunchDescription()
     ld.add_action(SetEnvironmentVariable('RCUTILS_LOGGING_BUFFERED_STREAM', '1'))
     
-    # RTAB-Map library workaround from original launch file
-    _rtabmap_lib = '/home/wheeltec/wzy/third_party/rtabmap-0.23.4/install/lib'
-    _existing_ldpath = os.environ.get('LD_LIBRARY_PATH', '')
-    ld.add_action(SetEnvironmentVariable('LD_LIBRARY_PATH',
-        _rtabmap_lib + ':' + _existing_ldpath if _existing_ldpath else _rtabmap_lib
-    ))
+    # RTAB-Map library workaround: dynamically locate from workspace root
+    _colcon_prefix = os.environ.get('COLCON_PREFIX_PATH', '')
+    if _colcon_prefix:
+        _ws_root = os.path.dirname(_colcon_prefix.split(':')[0])
+        _rtabmap_lib = os.path.join(_ws_root, 'third_party', 'rtabmap-0.23.4', 'install', 'lib')
+        _existing_ldpath = os.environ.get('LD_LIBRARY_PATH', '')
+        ld.add_action(SetEnvironmentVariable('LD_LIBRARY_PATH',
+            _rtabmap_lib + ':' + _existing_ldpath if _existing_ldpath else _rtabmap_lib
+        ))
     
     for arg in declare_args:
         ld.add_action(arg)

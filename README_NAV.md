@@ -17,25 +17,21 @@ ros2 launch robot_bringup bringup.launch.py mode:=navigation
 - `enable_gps=false`
 - RTAB-Map 使用已有数据库做定位，不继续增量建图
 - Nav2 使用 `nav2_bringup` 的默认导航技术栈
-
-这里重点描述导航阶段的数据链路，不再展开建图阶段 `icp_odometry -> /odometry/lio -> EKF` 的前端细节。
+- FAST-LIO 同时提供里程计和去畸变点云
 
 ## 1. 导航过程
-
-`src/robot_bringup/` 目前是本地 `launch/config` 目录，不是独立 ROS 包。
-下面只画默认导航模式里实际参与定位、规划、控制和避障的 ROS 包，以及它们和外部传感器输入的关系。
 
 ### 1.1 包协作过程
 
 ```mermaid
 flowchart LR
-    SENSOR["外部传感器输入\nLiDAR / IMU / RGB-D / 可选 GPS"] --> EKF["robot_localization\nekf_node"]
-    EKF --> ODOM["/odometry/local"]
+    LIVOX["livox_ros_driver2\n/livox/lidar + /livox/imu"] --> FASTLIO["FAST-LIO"]
+    FASTLIO --> ODOM["/Odometry\n+ TF: odom → base_footprint"]
+    FASTLIO --> CLOUD["/cloud_registered_body"]
 
-    RTAB_LAUNCH["rtabmap_launch\n(localization mode)"] --> RTAB["rtabmap_slam"]
-    SENSOR --> RTAB
-    ODOM --> RTAB
-    RTAB --> MAP["/map + TF: map -> odom"]
+    ODOM --> RTAB["rtabmap_slam\n(localization mode)"]
+    CLOUD --> RTAB
+    RTAB --> MAP["/map + TF: map → odom"]
 
     GOAL["导航目标\nRViz / 上层任务"] --> BTN["Nav2\nbt_navigator"]
     BTN --> PLANNER["planner_server"]
@@ -44,8 +40,8 @@ flowchart LR
 
     MAP --> GCOST["global_costmap"]
     ODOM --> LCOST["local_costmap"]
-    SENSOR --> GCOST
-    SENSOR --> LCOST
+    CLOUD --> GCOST
+    CLOUD --> LCOST
 
     GCOST --> PLANNER
     PLANNER --> PATH["全局路径"]
@@ -54,13 +50,13 @@ flowchart LR
     ODOM --> CONTROLLER
 
     CONTROLLER --> CMD["/cmd_vel"]
-    SENSOR --> CM["collision_monitor"]
+    CLOUD --> CM["collision_monitor"]
     CMD --> CM
     CM --> SAFE["/cmd_vel_safe"]
     SAFE --> BASE["底盘控制器"]
 ```
 
-- `robot_localization` 负责提供本地连续位姿 `/odometry/local`，这是整个导航栈的局部运动基准。
+- `FAST-LIO` 消费 Livox 原始点云和 IMU，输出激光惯性紧耦合里程计 `/Odometry` 和去畸变点云 `/cloud_registered_body`。
 - `rtabmap_slam` 在导航阶段工作于 `localization` 模式，负责利用已有地图做重定位，并持续发布 `/map` 和 `map -> odom`。
 - Nav2 不直接依赖 RTAB-Map 的内部图优化逻辑，而是消费 RTAB-Map 给出的全局地图与全局坐标关系。
 - `planner_server` 基于全局代价地图计算全局路径，`controller_server` 基于局部代价地图和局部里程计跟踪路径。
@@ -77,13 +73,13 @@ flowchart LR
 
 RTAB-Map 在这里**不负责**：
 
-- 生成本地连续里程计 `odom -> base_footprint`
+- 生成本地连续里程计 `odom -> base_footprint`（由 FAST-LIO 负责）
 - 代替 Nav2 做路径规划
 - 直接输出底盘速度命令
 
 换句话说，导航阶段的职责边界是：
 
-- `EKF`：局部连续位姿
+- `FAST-LIO`：局部连续位姿 + 去畸变点云
 - `RTAB-Map`：全局地图与全局定位
 - `Nav2`：规划、控制、恢复行为
 - `collision_monitor`：最终安全门控
@@ -95,21 +91,22 @@ RTAB-Map 在这里**不负责**：
 ```mermaid
 flowchart LR
     subgraph A["定位与地图链路"]
-        IMU["/sensors/imu/data"] --> EKF["robot_localization\nekf_node"]
-        ODOM_SRC["外部局部里程计\n例如 /odometry/lio"] --> EKF
-        EKF --> ODOM_LOCAL["/odometry/local"]
+        CLOUD["/livox/lidar"] --> FASTLIO["FAST-LIO"]
+        IMU["/livox/imu"] --> FASTLIO
+        FASTLIO --> ODOM["/Odometry"]
+        FASTLIO --> CLOUD_REG["/cloud_registered_body"]
 
-        LIDAR["/sensors/lidar/points_deskewed"] --> RTAB["rtabmap_slam\n(localization mode)"]
+        CLOUD_REG --> RTAB["rtabmap_slam\n(localization mode)"]
         RGBD["RGB-D 图像 / 相机信息"] --> RTAB
-        IMU --> RTAB
-        ODOM_LOCAL --> RTAB
+        IMU2["/livox/imu"] --> RTAB
+        ODOM --> RTAB
 
         RTAB --> MAP["/map"]
-        RTAB --> TFMAP["TF: map -> odom"]
+        RTAB --> TFMAP["TF: map → odom"]
     end
 ```
 
-- `/odometry/local` 仍然是导航期间 RTAB-Map 与 Nav2 的共同位姿输入。
+- `/Odometry` 是导航期间 RTAB-Map 与 Nav2 的共同位姿输入。
 - RTAB-Map 不是靠 `/map` 做规划，而是负责不断校正 `map -> odom`，让机器人在全局地图里位置稳定。
 - 默认 `sensor_profile=lidar_rgbd` 时，RTAB-Map 同时会使用 LiDAR 和 RGB-D 相机输入；如果切成别的传感器模式，这一支路会变化。
 
@@ -124,9 +121,9 @@ flowchart LR
         BTN --> BEHAVIOR["behavior_server"]
 
         MAP["/map"] --> GLOBAL["global_costmap\nstatic_layer"]
-        CLOUD1["/sensors/lidar/points_deskewed"] --> GLOBAL
-        CLOUD2["/sensors/lidar/points_deskewed"] --> LOCAL["local_costmap"]
-        ODOM["/odometry/local"] --> LOCAL
+        CLOUD1["/cloud_registered_body"] --> GLOBAL
+        CLOUD2["/cloud_registered_body"] --> LOCAL["local_costmap"]
+        ODOM["/Odometry"] --> LOCAL
         ODOM --> CONTROLLER
 
         GLOBAL --> PLANNER
@@ -135,15 +132,15 @@ flowchart LR
         LOCAL --> CONTROLLER
 
         CONTROLLER --> CMD["/cmd_vel"]
-        CLOUD3["/sensors/lidar/points_deskewed"] --> CM["collision_monitor"]
+        CLOUD3["/cloud_registered_body"] --> CM["collision_monitor"]
         CMD --> CM
         CM --> SAFE["/cmd_vel_safe"]
     end
 ```
 
 - 全局代价地图工作在 `map` 坐标系，主要依赖 RTAB-Map 提供的 `/map`。
-- 局部代价地图工作在 `odom` 坐标系，主要依赖 `/odometry/local` 和近场点云障碍物。
-- 默认配置里，全局与局部代价地图的障碍层都使用 `/sensors/lidar/points_deskewed`。
+- 局部代价地图工作在 `odom` 坐标系，主要依赖 `/Odometry` 和近场点云障碍物。
+- 默认配置里，全局与局部代价地图的障碍层都使用 `/cloud_registered_body`（FAST-LIO 去畸变后的点云）。
 - 控制器输出 `/cmd_vel` 后，还会经过 `collision_monitor`，最终给到底盘的是 `/cmd_vel_safe`。
 
 ## 3. 默认配置下各模块的关键输入/输出
@@ -152,9 +149,9 @@ flowchart LR
 
 输入：
 
-- `/odometry/local`
-- `/sensors/imu/data`
-- `/sensors/lidar/points_deskewed`
+- `/Odometry`
+- `/livox/imu`
+- `/cloud_registered_body`
 - `RGB-D` 相机话题（默认 `sensor_profile=lidar_rgbd`）
 - 可选 `/sensors/gps/fix`（仅 `enable_gps=true`）
 
@@ -169,8 +166,8 @@ flowchart LR
 输入：
 
 - `/map`
-- `/odometry/local`
-- `/sensors/lidar/points_deskewed`
+- `/Odometry`
+- `/cloud_registered_body`
 - 目标点 / 导航动作请求
 
 输出：
@@ -184,7 +181,7 @@ flowchart LR
 输入：
 
 - `/cmd_vel`
-- `/sensors/lidar/points_deskewed`
+- `/cloud_registered_body`
 - TF: `odom -> base_footprint`
 
 输出：
@@ -196,21 +193,23 @@ flowchart LR
 默认导航模式下，工程假定主 TF 关系为：
 
 ```text
-map -> odom -> base_footprint -> base_link -> sensors
+map → odom → base_footprint → base_link → livox_frame
+ ↑      ↑        (static)       (static)
+rtabmap FAST-LIO
 ```
 
 其中：
 
 - `map -> odom` 由 RTAB-Map 提供
-- `odom -> base_footprint` 由 EKF 提供
-- `base_footprint -> base_link` 在当前 bringup 里可由静态 TF 顶上
-- `base_link -> sensors` 需要由外部传感器驱动、URDF 或额外静态 TF 保证
+- `odom -> base_footprint` 由 FAST-LIO 提供
+- `base_footprint -> base_link` 在当前 bringup 里由静态 TF 发布
+- `base_link -> livox_frame` 在当前 bringup 里由静态 TF 发布
 
 ## 5. 一句话总结
 
-导航阶段不是“RTAB-Map 接管一切”，而是四层分工：
+导航阶段不是"RTAB-Map 接管一切"，而是四层分工：
 
-- `EKF` 负责局部连续位姿
+- `FAST-LIO` 负责局部连续位姿和去畸变点云
 - `RTAB-Map` 负责全局定位和地图坐标
 - `Nav2` 负责规划与控制
 - `collision_monitor` 负责最终的速度安全门控
