@@ -67,7 +67,7 @@ def generate_launch_description() -> LaunchDescription:
                               description='Launch RViz'),
         DeclareLaunchArgument('autostart', default_value='true',
                               description='Auto-start Nav2 lifecycle nodes'),
-        DeclareLaunchArgument('database_path', default_value='/data/maps/site_a/rtabmap.db',
+        DeclareLaunchArgument('database_path', default_value='~/.ros/rtabmap.db',
                               description='Path to RTAB-Map database for localization'),
         DeclareLaunchArgument('sensor_profile', default_value='lidar_only',
                               description='lidar_only | lidar_rgbd | lidar_stereo | lidar_mono'),
