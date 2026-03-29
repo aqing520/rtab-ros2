@@ -177,6 +177,7 @@ def generate_launch_description() -> LaunchDescription:
     rtabmap_la = {
         'use_sim_time': use_sim_time,
         'localization': 'true',
+        'map_topic': '/map',
         'database_path': database_path,
         'frame_id': LaunchConfiguration('frame_id'),
         'map_frame_id': LaunchConfiguration('map_frame_id'),
